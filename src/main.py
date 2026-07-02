@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Depends, Query, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Annotated
-from sqlalchemy import ForeignKey, String, create_engine, select
-from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase, Session
+from sqlalchemy import String, create_engine, select
+from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, Session
+from dotenv import dotenv_values
 
 class Base(DeclarativeBase):
     pass 
@@ -15,12 +16,18 @@ class User(Base):
     fullname: Mapped[Optional[str]]
     email: Mapped[str] = mapped_column(String(50))
 
-user = 'postgres'
-pin = 'We rock'
-host = '127.0.0.1'
-port = 5432
-db_name = 'proj2_auth'
+import os
 
+os.chdir(r"G:\Desktop\Scripts\Project 2\src")
+#print(os.path.exists(".env"))
+
+v = dotenv_values(".env")
+
+user = v["user"]
+pin = v["pin"]
+host = v["host"]
+port = v["port"]
+db_name = v["db_name"]
 
 db_url = f"postgresql+psycopg2://{user}:{pin}@{host}:{port}/{db_name}"
 engine = create_engine(db_url) #engine just connection to db server
@@ -48,17 +55,18 @@ class UserCreate(BaseModel):
 
 @app.post("/users/")
 async def new_user(user: UserCreate, session: session_dependency):
-    user = User(
+    db_user = User(
         name = user.name,
         fullname = user.fullname,
         email = user.email
     )
-    session.add(user)
+    session.add(db_user)
     session.commit()
-    return user
+    session.refresh(db_user)
+    return {db_user}
 
 
-@app.get("/users/")
+@app.get("/users/", response_model=List[UserCreate])
 async def read_users(
     session: session_dependency, 
     offset: int = 0, #just synonyms for start
