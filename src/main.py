@@ -18,7 +18,7 @@ class User(Base):
 
 import os
 
-os.chdir(r"G:\Desktop\Scripts\Project 2\src")
+#os.chdir(r"G:\Desktop\Scripts\Project 2\src") unprofessional
 #print(os.path.exists(".env"))
 
 v = dotenv_values(".env")
@@ -74,6 +74,7 @@ async def read_users(
     users = session.scalars(select(User).offset(offset).limit(limit)).all()
     return users
 
+
 @app.get("/users/{user_id}")
 async def read_a_user(
     user_id: int,
@@ -82,6 +83,7 @@ async def read_a_user(
     if not user:
         raise HTTPException(status_code=404, detail="User not found!")
     return user
+
 
 @app.delete("/users/{user_id}")
 async def remove_user(
@@ -94,3 +96,18 @@ async def remove_user(
     session.delete(user)
     session.commit()
     return {"status":"successfully removed!"}
+
+
+@app.put("/users/{user_id}")
+async def update_user(
+    user: UserCreate,
+    user_id: int,
+    session: session_dependency
+) -> UserCreate:
+    db_user = session.get(User, user_id)
+    db_user.name = user.name
+    db_user.fullname = user.fullname
+    db_user.email = user.email
+    session.commit()
+    session.refresh(db_user)
+    return db_user
