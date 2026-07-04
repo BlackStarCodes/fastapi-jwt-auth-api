@@ -69,6 +69,9 @@ hasher = PasswordHash.recommended()
 dummy = hasher.hash("dummy-pass")
 
 
+def pwd_hashed(pwd):
+    return hasher.hash(pwd)
+
 
 def verify_pass(pwd, hashed_pwd):
     return hasher.verify(pwd, hashed_pwd)
@@ -84,7 +87,7 @@ async def new_user(user: UserSignup, session: session_dependency):
         name = user.name,
         fullname = user.fullname,
         email = user.email,
-        hashed_password = hasher.hash(user.password)
+        hashed_password = pwd_hashed(user.password)
     )
     session.add(db_user)
     session.commit()
@@ -146,14 +149,18 @@ async def update_user(
     db_user = session.get(UserORM, user_id)
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found!")
-    if session.scalar(select(UserORM).where(UserORM.name == user.name)):
+    existing = session.scalar(select(UserORM).where(UserORM.name == user.name))
+    if existing and existing.id != user_id:
         raise HTTPException(status_code=409, detail="username already taken, enter new username!")
-    if session.scalar((select(UserORM).where(UserORM.email == user.email))):
+    
+    existing = session.scalar((select(UserORM).where(UserORM.email == user.email)))
+    if existing and existing.id != user_id:
         raise HTTPException(status_code=409, detail="email already in use!, enter new email")
+    
     db_user.name = user.name
     db_user.fullname = user.fullname
     db_user.email = user.email
-    db_user.hashed_password = hasher.hash(user.password)
+    db_user.hashed_password = pwd_hashed(user.password)
 
     session.commit()
     session.refresh(db_user)
