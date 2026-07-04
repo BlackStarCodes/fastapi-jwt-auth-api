@@ -14,13 +14,13 @@ class Base(DeclarativeBase):
     pass 
 
 
-class User(Base):
+class UserORM(Base):
     __tablename__ = 'app_users'
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(30))
+    name: Mapped[str] = mapped_column(String(30), unique=True)
     fullname: Mapped[Optional[str]]
-    email: Mapped[str] = mapped_column(String(50))
+    email: Mapped[str] = mapped_column(String(50), unique=True)
     hashed_password: Mapped[str] = mapped_column(String(100))
 
 
@@ -50,71 +50,75 @@ app = FastAPI()
 
 
 class UserCreate(BaseModel):
-    id: int | None = None
     name: str
     fullname: str | None = None
     email: str
-    password: str 
     
 
-class UserInDB(UserCreate):
+class UserSignup(UserCreate):
     password: str
 #plain password gonna be username + first 2 letter of email. changing user info may cause problem since you can deduce plain password anymore
 
 
-hash = PasswordHash.recommended()
-dummy = hash.hash("dummy-pass")
+class UserOut(UserCreate):
+    id : int
+    model_config = { "from_attributes": True}
 
 
-def get_pass_hash(pwd):
-    return hash.hash(pwd)
+hasher = PasswordHash.recommended()
+dummy = hasher.hash("dummy-pass")
+
 
 
 def verify_pass(pwd, hashed_pwd):
-    return hash.verify(pwd, hashed_pwd)
+    return hasher.verify(pwd, hashed_pwd)
 
 
-@app.post("/users/")
-async def new_user(user: UserCreate, session: session_dependency):
-    db_user = User(
+@app.post("/users/", response_model= UserOut)
+async def new_user(user: UserSignup, session: session_dependency):
+    if session.scalar((select(UserORM).where(UserORM.name == user.name))):
+        raise HTTPException(status_code=409, detail="username already taken!")
+    if session.scalar((select(UserORM).where(UserORM.email == user.email))):
+        raise HTTPException(status_code=409, detail="email already in use!")
+    db_user = UserORM(
         name = user.name,
         fullname = user.fullname,
         email = user.email,
-        hashed_password = get_pass_hash(user.password)
+        hashed_password = hasher.hash(user.password)
     )
     session.add(db_user)
     session.commit()
     session.refresh(db_user)
-    return {db_user}
+    return db_user
 
 
-@app.post("/login/")
-async def sign_in(username: str, password: str, session: session_dependency):
-    user = session.scalar(select(User).where(User.name == username))
+@app.post("/login_verify/")
+async def login_verify(username: str, password: str, session: session_dependency):
+    user = session.scalar(select(UserORM).where(UserORM.name == username))
     if not user:
         verify_pass(password, dummy)
         raise HTTPException(status_code=401, detail="wrong credentials!")
     
-    if not verify_pass(password,user.hashed_password):
+    if not verify_pass(password, user.hashed_password):
         raise HTTPException(status_code=401, detail="wrong credentials!")
     return {"message": "signed in"}
 
 
 
-@app.get("/users/", response_model=List[UserCreate])
+@app.get("/users/", response_model=List[UserOut])
 async def read_users(
     session: session_dependency, 
     offset: int = 0, #just synonyms for start
-    limit: Annotated[int, Query(le=100)] = 100,) -> List[UserCreate]:
-    users = session.scalars(select(User).offset(offset).limit(limit)).all()
+    limit: Annotated[int, Query(le=100)] = 100,):
+    users = session.scalars(select(UserORM).offset(offset).limit(limit)).all()
     return users
 
 
-@app.get("/users/{user_id}")
+@app.get("/users/{user_id}", response_model=UserOut)
 async def read_a_user(
     user_id: int,
-    session: session_dependency,) -> UserCreate:
-    user = session.get(User, user_id)
+    session: session_dependency,):
+    user = session.get(UserORM, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found!")
     return user
@@ -124,25 +128,33 @@ async def read_a_user(
 async def remove_user(
     user_id: int,
     session: session_dependency
-) -> UserCreate:
-    user = session.get(User, user_id)
+) :
+    user = session.get(UserORM, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="Hero not found")
+        raise HTTPException(status_code=404, detail="User not found")
     session.delete(user)
     session.commit()
-    return {"status":"successfully removed!"}
+    return {"status":f"successfully removed the user with user id:{user_id} !"}
 
 
-@app.put("/users/{user_id}")
+@app.put("/users/{user_id}", response_model=UserOut)
 async def update_user(
-    user: UserCreate,
+    user: UserSignup,
     user_id: int,
     session: session_dependency
-) -> UserCreate:
-    db_user = session.get(User, user_id)
+) :
+    db_user = session.get(UserORM, user_id)
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found!")
+    if session.scalar(select(UserORM).where(UserORM.name == user.name)):
+        raise HTTPException(status_code=409, detail="username already taken, enter new username!")
+    if session.scalar((select(UserORM).where(UserORM.email == user.email))):
+        raise HTTPException(status_code=409, detail="email already in use!, enter new email")
     db_user.name = user.name
     db_user.fullname = user.fullname
     db_user.email = user.email
+    db_user.hashed_password = hasher.hash(user.password)
+
     session.commit()
     session.refresh(db_user)
     return db_user
