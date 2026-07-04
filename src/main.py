@@ -1,12 +1,18 @@
 from fastapi import FastAPI, Depends, Query, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import List, Optional, Annotated
 from sqlalchemy import String, create_engine, select
 from sqlalchemy.orm import Mapped, mapped_column, DeclarativeBase, Session
 from dotenv import dotenv_values
+import jwt
+from jwt.exceptions import InvalidTokenError
+from pwdlib import PasswordHash
+
 
 class Base(DeclarativeBase):
     pass 
+
 
 class User(Base):
     __tablename__ = 'app_users'
@@ -15,11 +21,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(30))
     fullname: Mapped[Optional[str]]
     email: Mapped[str] = mapped_column(String(50))
+    hashed_password: Mapped[str] = mapped_column(String(100))
 
-import os
-
-#os.chdir(r"G:\Desktop\Scripts\Project 2\src") unprofessional
-#print(os.path.exists(".env"))
 
 v = dotenv_values(".env")
 
@@ -51,6 +54,24 @@ class UserCreate(BaseModel):
     name: str
     fullname: str | None = None
     email: str
+    password: str 
+    
+
+class UserInDB(UserCreate):
+    password: str
+#plain password gonna be username + first 2 letter of email. changing user info may cause problem since you can deduce plain password anymore
+
+
+hash = PasswordHash.recommended()
+dummy = hash.hash("dummy-pass")
+
+
+def get_pass_hash(pwd):
+    return hash.hash(pwd)
+
+
+def verify_pass(pwd, hashed_pwd):
+    return hash.verify(pwd, hashed_pwd)
 
 
 @app.post("/users/")
@@ -58,12 +79,26 @@ async def new_user(user: UserCreate, session: session_dependency):
     db_user = User(
         name = user.name,
         fullname = user.fullname,
-        email = user.email
+        email = user.email,
+        hashed_password = get_pass_hash(user.password)
     )
     session.add(db_user)
     session.commit()
     session.refresh(db_user)
     return {db_user}
+
+
+@app.post("/login/")
+async def sign_in(username: str, password: str, session: session_dependency):
+    user = session.scalar(select(User).where(User.name == username))
+    if not user:
+        verify_pass(password, dummy)
+        raise HTTPException(status_code=401, detail="wrong credentials!")
+    
+    if not verify_pass(password,user.hashed_password):
+        raise HTTPException(status_code=401, detail="wrong credentials!")
+    return {"message": "signed in"}
+
 
 
 @app.get("/users/", response_model=List[UserCreate])
