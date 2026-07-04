@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, Query, HTTPException
+from fastapi import FastAPI, Depends, Query, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import List, Optional, Annotated
@@ -8,6 +8,7 @@ from dotenv import dotenv_values
 import jwt
 from jwt.exceptions import InvalidTokenError
 from pwdlib import PasswordHash
+from datetime import datetime, timedelta, timezone
 
 
 class Base(DeclarativeBase):
@@ -35,8 +36,10 @@ db_name = v["db_name"]
 db_url = f"postgresql+psycopg2://{user}:{pin}@{host}:{port}/{db_name}"
 engine = create_engine(db_url) #engine just connection to db server
 
+
 def create_table():
     Base.metadata.create_all(engine)
+
 
 def get_session():
     with Session(engine) as session:
@@ -45,6 +48,14 @@ def get_session():
 
 session_dependency = Annotated[Session, Depends(get_session)]
 create_table()
+
+
+SECRET_KEY= v["SECRET_KEY"]
+ALGO = v["ALGORITHM"]
+TOKEN_EXPIRE_MINS = 30
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
 
 app = FastAPI()
 
@@ -65,6 +76,20 @@ class UserOut(UserCreate):
     model_config = { "from_attributes": True}
 
 
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type:str
+
+
+class TokenData(BaseModel):
+    username: str | None = None
+
+
 hasher = PasswordHash.recommended()
 dummy = hasher.hash("dummy-pass")
 
@@ -75,6 +100,43 @@ def pwd_hashed(pwd):
 
 def verify_pass(pwd, hashed_pwd):
     return hasher.verify(pwd, hashed_pwd)
+
+
+def authenticate_user(session: session_dependency, username: str, password: str):
+    user = session.scalar(select(UserORM).where(UserORM.name == username))
+    if not user:
+        verify_pass(password, dummy)
+        return False
+    if not verify_pass(password, user.hashed_password):
+        return False
+    return user
+
+
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.now(timezone.utc) + expires_delta
+    else:
+        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGO)
+    return encoded_jwt
+    
+
+def get_current_user(token: Annotated[str, Depends(oauth2_scheme)], session: session_dependency):
+    credentials_exception = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate credentials!", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGO])
+        username = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except InvalidTokenError:
+        raise credentials_exception
+    user = session.scalar((select(UserORM).where(UserORM.name == token_data.username)))
+    if user is None:
+        raise credentials_exception
+    return user
 
 
 @app.post("/users/", response_model= UserOut)
@@ -93,6 +155,16 @@ async def new_user(user: UserSignup, session: session_dependency):
     session.commit()
     session.refresh(db_user)
     return db_user
+
+
+@app.post("/login/")
+async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: session_dependency) -> Token:
+    user = authenticate_user(session, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password!", headers={"WWW-Authenticate": "Bearer"})
+    access_token_expires = timedelta(minutes=TOKEN_EXPIRE_MINS)
+    access_token = create_access_token(data={"sub":user.name}, expires_delta= access_token_expires)
+    return Token(access_token=access_token, token_type="bearer")
 
 
 @app.post("/login_verify/")
@@ -115,6 +187,11 @@ async def read_users(
     limit: Annotated[int, Query(le=100)] = 100,):
     users = session.scalars(select(UserORM).offset(offset).limit(limit)).all()
     return users
+
+
+@app.get("/users/me", response_model=UserOut)
+async def read_current_user(user:Annotated[UserCreate, Depends(get_current_user)]):
+    return user
 
 
 @app.get("/users/{user_id}", response_model=UserOut)
