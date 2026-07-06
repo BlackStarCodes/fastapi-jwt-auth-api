@@ -167,19 +167,6 @@ async def login_for_access_token(form_data: Annotated[OAuth2PasswordRequestForm,
     return Token(access_token=access_token, token_type="bearer")
 
 
-@app.post("/login_verify/")
-async def login_verify(username: str, password: str, session: session_dependency):
-    user = session.scalar(select(UserORM).where(UserORM.name == username))
-    if not user:
-        verify_pass(password, dummy)
-        raise HTTPException(status_code=401, detail="wrong credentials!")
-    
-    if not verify_pass(password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="wrong credentials!")
-    return {"message": "signed in"}
-
-
-
 @app.get("/users/", response_model=List[UserOut])
 async def read_users(
     session: session_dependency, 
