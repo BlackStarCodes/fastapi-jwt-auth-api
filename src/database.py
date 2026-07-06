@@ -6,7 +6,8 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(URL) #engine just connection to db server
+engine = create_engine(URL) 
+#engine just a connection to db server
 
 
 def create_table():
