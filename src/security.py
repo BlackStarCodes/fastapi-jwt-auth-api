@@ -6,15 +6,10 @@ from .models import UserORM
 from sqlalchemy import select
 from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException, status, Depends
-from dotenv import dotenv_values
 from typing import Annotated
 from .schemas import TokenData
+from .config import SECRET_KEY, ALGO
 
-
-v = dotenv_values(".env")
-SECRET_KEY= v["SECRET_KEY"]
-ALGO = v["ALGORITHM"]
-TOKEN_EXPIRE_MINS = 30
 
 
 hasher = PasswordHash.recommended()

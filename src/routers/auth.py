@@ -1,11 +1,12 @@
 #auth routes here. user can access user_routes only after being authenticated
 from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from ..auth import authenticate_user, TOKEN_EXPIRE_MINS, create_access_token
+from ..security import authenticate_user, create_access_token
 from ..dependencies import session_dependency
 from datetime import timedelta
 from typing import Annotated
 from ..schemas import Token
+from ..config import TOKEN_EXPIRE_MINS
 
 
 router = APIRouter()

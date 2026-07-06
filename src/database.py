@@ -1,19 +1,10 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 from dotenv import dotenv_values
-
+from .config import user, pin, host, port, db_name
 
 class Base(DeclarativeBase):
     pass
-
-
-v = dotenv_values(".env")
-
-user = v["user"]
-pin = v["pin"]
-host = v["host"]
-port = v["port"]
-db_name = v["db_name"]
 
 
 db_url = f"postgresql+psycopg2://{user}:{pin}@{host}:{port}/{db_name}"
@@ -29,4 +20,3 @@ def get_session():
         yield session
 
 
-create_table()

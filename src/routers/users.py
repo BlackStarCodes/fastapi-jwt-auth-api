@@ -4,7 +4,7 @@ from ..dependencies import session_dependency
 from ..schemas import UserOut, UserSignup, UserCreate
 from ..models import UserORM
 from sqlalchemy import select
-from ..auth import pwd_hashed, get_current_user
+from ..security import pwd_hashed, get_current_user
 from typing import Annotated, List
 
 router = APIRouter()
