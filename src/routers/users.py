@@ -59,7 +59,7 @@ async def remove_user(
     session: session_dependency
 ) :
     if user_id != user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail= "Not allowed to modify this user!")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail= "Not allowed to delete this user!")
     session.delete(user)
     session.commit()
     return {"status":f"successfully removed the user with user id:{user_id} !"}

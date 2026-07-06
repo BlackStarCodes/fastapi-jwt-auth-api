@@ -1,13 +1,12 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
-from dotenv import dotenv_values
-from .config import url
+from .config import URL
 
 class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(url) #engine just connection to db server
+engine = create_engine(URL) #engine just connection to db server
 
 
 def create_table():
