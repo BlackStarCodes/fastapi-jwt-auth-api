@@ -2,3 +2,4 @@
 src/__pycache__
 src/.env
 src/practise-main.py
+__pycache__/
