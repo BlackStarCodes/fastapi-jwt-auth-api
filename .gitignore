@@ -6,5 +6,5 @@ __pycache__/
 *.pyc
 *.7z
 *.zip
-.env
+.env.real
 .gitignore2
