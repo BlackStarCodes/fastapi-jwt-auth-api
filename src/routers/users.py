@@ -1,5 +1,5 @@
 #all user endpoint should be here
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends,status
 from ..dependencies import session_dependency
 from ..schemas import UserOut, UserSignup, UserCreate
 from ..models import UserORM
@@ -54,12 +54,12 @@ async def read_a_user(
 
 @router.delete("/users/{user_id}")
 async def remove_user(
+    user: Annotated[UserORM, Depends(get_current_user)],
     user_id: int,
     session: session_dependency
 ) :
-    user = session.get(UserORM, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail= "Not allowed to modify this user!")
     session.delete(user)
     session.commit()
     return {"status":f"successfully removed the user with user id:{user_id} !"}
@@ -67,25 +67,30 @@ async def remove_user(
 
 @router.put("/users/{user_id}", response_model=UserOut)
 async def update_user(
-    user: UserSignup,
+    user: Annotated[UserORM, Depends(get_current_user)],
+    update_user: UserSignup,
     user_id: int,
     session: session_dependency
 ) :
-    db_user = session.get(UserORM, user_id)
+    db_user = user
     if not db_user:
         raise HTTPException(status_code=404, detail="User not found!")
-    existing = session.scalar(select(UserORM).where(UserORM.name == user.name))
+    
+    if user_id != db_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail= "Not allowed to modify this user!")
+    
+    existing = session.scalar(select(UserORM).where(UserORM.name == update_user.name))
     if existing and existing.id != user_id:
         raise HTTPException(status_code=409, detail="username already taken, enter new username!")
     
-    existing = session.scalar((select(UserORM).where(UserORM.email == user.email)))
+    existing = session.scalar((select(UserORM).where(UserORM.email == update_user.email)))
     if existing and existing.id != user_id:
         raise HTTPException(status_code=409, detail="email already in use!, enter new email")
     
-    db_user.name = user.name
-    db_user.fullname = user.fullname
-    db_user.email = user.email
-    db_user.hashed_password = pwd_hashed(user.password)
+    db_user.name = update_user.name
+    db_user.fullname = update_user.fullname
+    db_user.email = update_user.email
+    db_user.hashed_password = pwd_hashed(update_user.password)
 
     session.commit()
     session.refresh(db_user)

@@ -1,8 +1,10 @@
 /.venv
 src/__pycache__
-src/.env
+requirements2.txt
 src/practise-main.py
 __pycache__/
 *.pyc
 *.7z
 *.zip
+.env
+.gitignore2

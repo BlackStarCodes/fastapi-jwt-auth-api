@@ -1,14 +1,13 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session
 from dotenv import dotenv_values
-from .config import user, pin, host, port, db_name
+from .config import url
 
 class Base(DeclarativeBase):
     pass
 
 
-db_url = f"postgresql+psycopg2://{user}:{pin}@{host}:{port}/{db_name}"
-engine = create_engine(db_url) #engine just connection to db server
+engine = create_engine(url) #engine just connection to db server
 
 
 def create_table():
